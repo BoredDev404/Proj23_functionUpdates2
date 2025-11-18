@@ -606,6 +606,248 @@ const LifeTrackerApp = {
         });
     },
 
+    // RESTORED: Dopamine Page (fully functional as before)
+    async renderDopaminePage() {
+        const dopamineEl = document.getElementById('dopamine');
+        const currentStreak = await this.calculateCurrentStreak();
+        const longestStreak = await this.calculateLongestStreak();
+        const recentEntries = await this.getRecentDopamineEntries();
+
+        dopamineEl.innerHTML = `
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-title">Dopamine Control</div>
+                </div>
+                
+                <div class="calendar-container">
+                    <div class="calendar-header">
+                        <div class="calendar-month">${this.currentViewMonth.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}</div>
+                        <div class="calendar-nav">
+                            <div class="calendar-nav-btn" id="prevDopamineMonth">
+                                <i class="fas fa-chevron-left"></i>
+                            </div>
+                            <div class="calendar-nav-btn" id="nextDopamineMonth">
+                                <i class="fas fa-chevron-right"></i>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="calendar" id="dopamineCalendar">
+                        ${await this.renderDopamineCalendar()}
+                    </div>
+                </div>
+                
+                <div class="streak-display">
+                    <div class="streak-info">
+                        <div class="streak-value">${currentStreak}</div>
+                        <div class="streak-label">Current Streak</div>
+                    </div>
+                    <div class="streak-info">
+                        <div class="streak-value">${longestStreak}</div>
+                        <div class="streak-label">Longest Streak</div>
+                    </div>
+                </div>
+                
+                <button class="btn btn-primary" id="logDopamineStatus">
+                    <i class="fas fa-plus"></i> Log Today's Status
+                </button>
+            </div>
+            
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-title">Recent Entries</div>
+                </div>
+                <div id="dopamineEntries">
+                    ${recentEntries.length > 0 ? recentEntries : `
+                        <div class="empty-state">
+                            <i class="fas fa-brain"></i>
+                            <p>No entries yet</p>
+                            <p>Start tracking your progress today!</p>
+                        </div>
+                    `}
+                </div>
+            </div>
+        `;
+
+        // Add event listeners
+        const prevBtn = document.getElementById('prevDopamineMonth');
+        const nextBtn = document.getElementById('nextDopamineMonth');
+        const logBtn = document.getElementById('logDopamineStatus');
+
+        if (prevBtn) {
+            prevBtn.addEventListener('click', () => {
+                this.currentViewMonth.setMonth(this.currentViewMonth.getMonth() - 1);
+                this.renderDopaminePage();
+            });
+        }
+
+        if (nextBtn) {
+            nextBtn.addEventListener('click', () => {
+                this.currentViewMonth.setMonth(this.currentViewMonth.getMonth() + 1);
+                this.renderDopaminePage();
+            });
+        }
+
+        if (logBtn) {
+            logBtn.addEventListener('click', () => {
+                this.showDopamineModal();
+            });
+        }
+
+        // Add click handlers for entries
+        dopamineEl.querySelectorAll('.edit-dopamine').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const entryId = parseInt(btn.getAttribute('data-id'));
+                this.editDopamineEntry(entryId);
+            });
+        });
+    },
+
+    async renderDopamineCalendar() {
+        const firstDay = new Date(this.currentViewMonth.getFullYear(), this.currentViewMonth.getMonth(), 1);
+        const lastDay = new Date(this.currentViewMonth.getFullYear(), this.currentViewMonth.getMonth() + 1, 0);
+        const today = new Date();
+        
+        let calendarHTML = '';
+        
+        // Day headers
+        const days = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
+        days.forEach(day => {
+            calendarHTML += `<div class="calendar-day empty"><div class="day-name">${day}</div></div>`;
+        });
+        
+        // Empty days before first day of month
+        for (let i = 0; i < firstDay.getDay(); i++) {
+            calendarHTML += '<div class="calendar-day empty"></div>';
+        }
+        
+        // Days of the month
+        for (let i = 1; i <= lastDay.getDate(); i++) {
+            const dayDate = new Date(this.currentViewMonth.getFullYear(), this.currentViewMonth.getMonth(), i);
+            const dateKey = this.formatDate(dayDate);
+            let dayClass = 'calendar-day future';
+            
+            // Check if it's today
+            if (i === today.getDate() && this.currentViewMonth.getMonth() === today.getMonth() && this.currentViewMonth.getFullYear() === today.getFullYear()) {
+                dayClass += ' current';
+            }
+            
+            // Check dopamine status for this day
+            const dopamineEntry = await db.dopamineEntries.where('date').equals(dateKey).first();
+            if (dopamineEntry) {
+                dayClass += dopamineEntry.status === 'passed' ? ' passed' : ' failed';
+            }
+            
+            calendarHTML += `
+                <div class="${dayClass}" data-date="${dateKey}">
+                    <div class="day-number">${i}</div>
+                </div>
+            `;
+        }
+        
+        return calendarHTML;
+    },
+
+    showDopamineModal(entry = null) {
+        const today = this.formatDate(new Date());
+        const dateInput = document.getElementById('dopamineDate');
+        const statusInput = document.getElementById('dopamineStatus');
+        const notesInput = document.getElementById('dopamineNotes');
+        const saveBtn = document.getElementById('saveDopamineLog');
+        const modalTitle = document.querySelector('#dopamineModal .modal-title');
+
+        if (dateInput && statusInput && notesInput && saveBtn && modalTitle) {
+            dateInput.value = entry ? entry.date : today;
+            statusInput.value = entry ? entry.status : 'passed';
+            notesInput.value = entry ? entry.notes : '';
+            
+            if (entry) {
+                modalTitle.textContent = 'Edit Dopamine Entry';
+                saveBtn.setAttribute('data-edit-id', entry.id);
+            } else {
+                modalTitle.textContent = 'Log Dopamine Status';
+                saveBtn.removeAttribute('data-edit-id');
+            }
+            
+            this.showModal('dopamineModal');
+        }
+    },
+
+    async saveDopamineEntry() {
+        const dateInput = document.getElementById('dopamineDate');
+        const statusInput = document.getElementById('dopamineStatus');
+        const notesInput = document.getElementById('dopamineNotes');
+        const saveBtn = document.getElementById('saveDopamineLog');
+
+        if (!dateInput || !statusInput || !notesInput || !saveBtn) return;
+
+        const date = dateInput.value;
+        const status = statusInput.value;
+        const notes = notesInput.value;
+        const editId = saveBtn.getAttribute('data-edit-id');
+
+        if (!date) {
+            alert('Please select a date');
+            return;
+        }
+
+        try {
+            if (editId) {
+                // Update existing entry
+                await db.dopamineEntries.update(parseInt(editId), {
+                    date,
+                    status,
+                    notes,
+                    createdAt: new Date()
+                });
+            } else {
+                // Create new entry
+                await db.dopamineEntries.add({
+                    date,
+                    status,
+                    notes,
+                    createdAt: new Date()
+                });
+            }
+
+            this.hideModal('dopamineModal');
+            this.renderDopaminePage();
+            this.renderDashboard();
+        } catch (error) {
+            console.error('Error saving dopamine entry:', error);
+            alert('Error saving entry. Please try again.');
+        }
+    },
+
+    async getRecentDopamineEntries() {
+        const entries = await db.dopamineEntries.orderBy('date').reverse().limit(5).toArray();
+        
+        return entries.map(entry => `
+            <div class="log-entry">
+                <div class="log-date">
+                    ${new Date(entry.date).toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+                    <div class="log-actions">
+                        <div class="log-action edit-dopamine" data-id="${entry.id}">
+                            <i class="fas fa-edit"></i>
+                        </div>
+                    </div>
+                </div>
+                <div class="log-status ${entry.status === 'passed' ? 'status-passed' : 'status-failed'}">
+                    ${entry.status === 'passed' ? 'Successful Day' : 'Challenging Day'}
+                </div>
+                <div class="log-notes">${entry.notes || 'No notes'}</div>
+            </div>
+        `).join('');
+    },
+
+    async editDopamineEntry(entryId) {
+        const entry = await db.dopamineEntries.get(entryId);
+        if (entry) {
+            this.showDopamineModal(entry);
+        }
+    },
+
     // Enhanced Hygiene Page with Individual Habit Tracking
     async renderHygienePage() {
         const hygieneEl = document.getElementById('hygiene');
@@ -1398,10 +1640,14 @@ const LifeTrackerApp = {
     showExerciseModal() {
         const exerciseNameInput = document.getElementById('exerciseName');
         const exercisePRInput = document.getElementById('exercisePR');
+        const exerciseSetsInput = document.getElementById('exerciseSets');
+        const exerciseRepsInput = document.getElementById('exerciseReps');
         
-        if (exerciseNameInput && exercisePRInput) {
+        if (exerciseNameInput && exercisePRInput && exerciseSetsInput && exerciseRepsInput) {
             exerciseNameInput.value = '';
             exercisePRInput.value = '';
+            exerciseSetsInput.value = '3';
+            exerciseRepsInput.value = '10';
             this.showModal('exerciseModal');
         }
     },
@@ -1409,11 +1655,15 @@ const LifeTrackerApp = {
     async saveExercise() {
         const exerciseNameInput = document.getElementById('exerciseName');
         const exercisePRInput = document.getElementById('exercisePR');
+        const exerciseSetsInput = document.getElementById('exerciseSets');
+        const exerciseRepsInput = document.getElementById('exerciseReps');
         
-        if (!exerciseNameInput || !exercisePRInput) return;
+        if (!exerciseNameInput || !exercisePRInput || !exerciseSetsInput || !exerciseRepsInput) return;
 
         const name = exerciseNameInput.value;
         const pr = exercisePRInput.value;
+        const targetSets = parseInt(exerciseSetsInput.value);
+        const targetReps = parseInt(exerciseRepsInput.value);
 
         if (!name) {
             alert('Please enter an exercise name');
@@ -1434,8 +1684,8 @@ const LifeTrackerApp = {
                 name,
                 pr,
                 order: nextOrder,
-                targetSets: 3,
-                targetReps: 10,
+                targetSets: targetSets,
+                targetReps: targetReps,
                 createdAt: new Date()
             });
 
