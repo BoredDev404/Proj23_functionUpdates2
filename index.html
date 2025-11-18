@@ -326,160 +326,34 @@
     <script src="app.js"></script>
     
     <script>
-    // Safari PWA Cache Buster
-    const APP_VERSION = 'safari-v2.0-' + new Date().getTime();
-    
-    // Nuclear cache clearing on every load during development
-    if (window.location.href.indexOf('github.io') !== -1) {
-        console.log('🧹 Nuclear cache clearing for Safari PWA');
-        
-        // Clear all caches
-        caches.keys().then(function(cacheNames) {
-            cacheNames.forEach(function(cacheName) {
-                console.log('🗑️ Deleting cache:', cacheName);
-                caches.delete(cacheName);
-            });
-        });
-        
-        // Clear service worker registrations
+        // Service Worker Registration for PWA
         if ('serviceWorker' in navigator) {
-            navigator.serviceWorker.getRegistrations().then(function(registrations) {
-                registrations.forEach(function(registration) {
-                    console.log('🔄 Unregistering service worker:', registration.scope);
-                    registration.unregister();
-                });
+            window.addEventListener('load', function() {
+                navigator.serviceWorker.register('./service-worker.js')
+                    .then(function(registration) {
+                        console.log('ServiceWorker registration successful with scope: ', registration.scope);
+                    })
+                    .catch(function(error) {
+                        console.log('ServiceWorker registration failed: ', error);
+                    });
             });
         }
-        
-        // Clear localStorage version tracking
-        localStorage.removeItem('pwaVersion');
-        sessionStorage.setItem('forceRefresh', 'true');
-    }
 
-    // Enhanced Service Worker Registration for Safari PWA
-    if ('serviceWorker' in navigator) {
-        window.addEventListener('load', function() {
-            // Register with aggressive update strategy
-            navigator.serviceWorker.register('./service-worker.js?version=' + APP_VERSION, {
-                updateViaCache: 'none',
-                scope: './'
-            })
-            .then(function(registration) {
-                console.log('✅ ServiceWorker registered successfully:', registration);
-                
-                // Check if this is a PWA (standalone mode)
-                const isPWA = window.matchMedia('(display-mode: standalone)').matches || 
-                             window.navigator.standalone === true;
-                
-                console.log('📱 PWA Mode:', isPWA);
-                
-                // Force immediate update check
-                registration.update();
-                
-                // Set up update found listener
-                registration.addEventListener('updatefound', function() {
-                    console.log('🔄 Service Worker update found!');
-                    const newWorker = registration.installing;
-                    
-                    newWorker.addEventListener('statechange', function() {
-                        console.log('📊 New Worker State:', newWorker.state);
-                        
-                        if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-                            console.log('🎉 New content available, reloading...');
-                            
-                            // Send skip waiting message
-                            newWorker.postMessage({ type: 'SKIP_WAITING' });
-                            
-                            // Reload after a short delay
-                            setTimeout(function() {
-                                window.location.reload();
-                            }, 1000);
-                        }
-                    });
-                });
-                
-                // Handle controller change (when new SW takes over)
-                navigator.serviceWorker.addEventListener('controllerchange', function() {
-                    console.log('👑 Controller changed, reloading page...');
-                    window.location.reload();
-                });
-                
-                // Check for waiting service worker
-                if (registration.waiting) {
-                    console.log('⏳ Service Worker waiting, skipping...');
-                    registration.waiting.postMessage({ type: 'SKIP_WAITING' });
-                }
-                
-                // Listen for messages from service worker
-                navigator.serviceWorker.addEventListener('message', function(event) {
-                    if (event.data.type === 'RELOAD_PAGE') {
-                        console.log('🔄 Service Worker requested reload');
-                        window.location.reload();
-                    }
-                });
-                
-            })
-            .catch(function(error) {
-                console.error('❌ ServiceWorker registration failed:', error);
-            });
-        });
-
-        // Handle page visibility changes (important for PWA)
-        document.addEventListener('visibilitychange', function() {
-            if (!document.hidden && navigator.serviceWorker.controller) {
-                // Page became visible, check for updates
-                navigator.serviceWorker.ready.then(registration => {
-                    registration.update();
-                });
+        // Prevent zoom on double-tap
+        document.addEventListener('touchstart', function(event) {
+            if (event.touches.length > 1) {
+                event.preventDefault();
             }
         });
-    }
 
-    // Detect if we're in standalone PWA mode and force refresh
-    if (window.navigator.standalone || window.matchMedia('(display-mode: standalone)').matches) {
-        console.log('🏠 Running in PWA (Home Screen) mode');
-        
-        // Force version check for PWA
-        const storedVersion = localStorage.getItem('pwaVersion');
-        if (storedVersion !== APP_VERSION) {
-            console.log('🆕 New PWA version detected, refreshing...');
-            localStorage.setItem('pwaVersion', APP_VERSION);
-            
-            // Clear all caches for PWA
-            caches.keys().then(cacheNames => {
-                cacheNames.forEach(cacheName => caches.delete(cacheName));
-            }).then(() => {
-                window.location.reload();
-            });
-        }
-    }
-
-    // Prevent zoom on double-tap
-    document.addEventListener('touchstart', function(event) {
-        if (event.touches.length > 1) {
-            event.preventDefault();
-        }
-    });
-
-    let lastTouchEnd = 0;
-    document.addEventListener('touchend', function(event) {
-        const now = (new Date()).getTime();
-        if (now - lastTouchEnd <= 300) {
-            event.preventDefault();
-        }
-        lastTouchEnd = now;
-    }, false);
-    
-    // Add a version indicator to the page for debugging
-    window.addEventListener('DOMContentLoaded', function() {
-        const versionEl = document.createElement('div');
-        versionEl.style.cssText = 'position:fixed;top:10px;right:10px;background:red;color:white;padding:5px;z-index:9999;font-size:10px;';
-        versionEl.textContent = 'v2.0-SAFARI';
-        document.body.appendChild(versionEl);
-        
-        // Remove after 5 seconds
-        setTimeout(() => versionEl.remove(), 5000);
-    });
-</script>
+        let lastTouchEnd = 0;
+        document.addEventListener('touchend', function(event) {
+            const now = (new Date()).getTime();
+            if (now - lastTouchEnd <= 300) {
+                event.preventDefault();
+            }
+            lastTouchEnd = now;
+        }, false);
+    </script>
 </body>
 </html>
