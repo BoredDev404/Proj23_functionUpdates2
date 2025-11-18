@@ -327,18 +327,108 @@
     
     <script>
         // Service Worker Registration for PWA
-        if ('serviceWorker' in navigator) {
-            window.addEventListener('load', function() {
-                navigator.serviceWorker.register('./service-worker.js')
-                    .then(function(registration) {
-                        console.log('ServiceWorker registration successful with scope: ', registration.scope);
-                    })
-                    .catch(function(error) {
-                        console.log('ServiceWorker registration failed: ', error);
+       if ('serviceWorker' in navigator) {
+        window.addEventListener('load', function() {
+            // Force update check on every load
+            navigator.serviceWorker.register('./service-worker.js', {
+                updateViaCache: 'none'
+            })
+            .then(function(registration) {
+                console.log('ServiceWorker registration successful with scope: ', registration.scope);
+                
+                // Check for updates immediately
+                registration.update();
+                
+                // Check for updates every hour
+                setInterval(() => {
+                    registration.update();
+                }, 60 * 60 * 1000);
+                
+                // Listen for controller changes (when new SW takes over)
+                navigator.serviceWorker.addEventListener('controllerchange', function() {
+                    console.log('New service worker activated, reloading page...');
+                    window.location.reload();
+                });
+                
+                // If there's a waiting service worker, prompt user to update
+                if (registration.waiting) {
+                    console.log('New service worker waiting, skipping waiting...');
+                    registration.waiting.postMessage({action: 'skipWaiting'});
+                }
+                
+                registration.addEventListener('updatefound', function() {
+                    console.log('New service worker update found...');
+                    const newWorker = registration.installing;
+                    
+                    newWorker.addEventListener('statechange', function() {
+                        if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                            console.log('New content available, reloading...');
+                            newWorker.postMessage({action: 'skipWaiting'});
+                        }
                     });
+                });
+            })
+            .catch(function(error) {
+                console.log('ServiceWorker registration failed: ', error);
             });
-        }
+            
+            // Ensure controlled pages also get updates
+            let refreshing = false;
+            navigator.serviceWorker.addEventListener('controllerchange', function() {
+                if (!refreshing) {
+                    refreshing = true;
+                    console.log('Controller changed, reloading page...');
+                    window.location.reload();
+                }
+            });
+        });
+        
+        // Listen for messages from service worker
+        navigator.serviceWorker.addEventListener('message', function(event) {
+            if (event.data.action === 'reload') {
+                window.location.reload();
+            }
+        });
+    }
 
+    // Clear any existing caches on load (nuclear option)
+    caches.keys().then(function(cacheNames) {
+        cacheNames.forEach(function(cacheName) {
+            if (cacheName.startsWith('life-tracker-') && cacheName !== 'life-tracker-v8.0') {
+                console.log('Deleting old cache:', cacheName);
+                caches.delete(cacheName);
+            }
+        });
+    });
+
+    // Prevent zoom on double-tap
+    document.addEventListener('touchstart', function(event) {
+        if (event.touches.length > 1) {
+            event.preventDefault();
+        }
+    });
+
+    let lastTouchEnd = 0;
+    document.addEventListener('touchend', function(event) {
+        const now = (new Date()).getTime();
+        if (now - lastTouchEnd <= 300) {
+            event.preventDefault();
+        }
+        lastTouchEnd = now;
+    }, false);
+    
+    // Force reload if we detect an old version
+    if (localStorage.getItem('appVersion') !== 'v8.0') {
+        localStorage.setItem('appVersion', 'v8.0');
+        console.log('New version detected, clearing caches...');
+        caches.keys().then(function(cacheNames) {
+            cacheNames.forEach(function(cacheName) {
+                caches.delete(cacheName);
+            });
+        }).then(() => {
+            window.location.reload();
+        });
+    }
         // Prevent zoom on double-tap
         document.addEventListener('touchstart', function(event) {
             if (event.touches.length > 1) {
