@@ -1,26 +1,52 @@
-{
-  "name": "Life Tracker Pro v2",
-  "short_name": "LifeTrackerV2",
-  "description": "Supercharged personal growth and habit tracking - NEW VERSION",
-  "start_url": "/Proj23_functionUpdates/?v=2",
-  "display": "standalone",
-  "background_color": "#0A0A0A",
-  "theme_color": "#FF0000",
-  "orientation": "portrait",
-  "scope": "/Proj23_functionUpdates/",
-  "icons": [
-    {
-      "src": "icons/icon-192.png",
-      "sizes": "192x192",
-      "type": "image/png",
-      "purpose": "any maskable"
-    },
-    {
-      "src": "icons/icon-512.png",
-      "sizes": "512x512",
-      "type": "image/png",
-      "purpose": "any maskable"
-    }
-  ],
-  "categories": ["health", "productivity", "lifestyle"]
-}
+// service-worker.js
+const CACHE_NAME = 'life-tracker-v7.0';
+const urlsToCache = [
+  '/Proj23_functionUpdates/',
+  '/Proj23_functionUpdates/index.html',
+  '/Proj23_functionUpdates/style.css',
+  '/Proj23_functionUpdates/app.js',
+  '/Proj23_functionUpdates/db.js',
+  '/Proj23_functionUpdates/manifest.json',
+  'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css',
+  'https://cdn.jsdelivr.net/npm/dexie@3.2.4/dist/dexie.min.js',
+  'https://cdn.jsdelivr.net/npm/chart.js',
+  'https://cdn.jsdelivr.net/npm/@emailjs/browser@3/dist/email.min.js'
+];
+
+self.addEventListener('install', function(event) {
+  event.waitUntil(
+    caches.open(CACHE_NAME)
+      .then(function(cache) {
+        console.log('Opened cache');
+        return cache.addAll(urlsToCache);
+      })
+  );
+});
+
+self.addEventListener('fetch', function(event) {
+  event.respondWith(
+    caches.match(event.request)
+      .then(function(response) {
+        if (response) {
+          return response;
+        }
+        return fetch(event.request);
+      }
+    )
+  );
+});
+
+self.addEventListener('activate', function(event) {
+  event.waitUntil(
+    caches.keys().then(function(cacheNames) {
+      return Promise.all(
+        cacheNames.map(function(cacheName) {
+          if (cacheName !== CACHE_NAME) {
+            console.log('Deleting old cache:', cacheName);
+            return caches.delete(cacheName);
+          }
+        })
+      );
+    })
+  );
+});
