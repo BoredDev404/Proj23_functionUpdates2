@@ -1,43 +1,4 @@
-// Force cache refresh on version change
-const APP_VERSION = 'v8.0';
-if (localStorage.getItem('appVersion') !== APP_VERSION) {
-    console.log('New app version detected, clearing data...');
-    
-    // Clear all caches
-    if (caches) {
-        caches.keys().then(cacheNames => {
-            cacheNames.forEach(cacheName => {
-                caches.delete(cacheName);
-            });
-        });
-    }
-    
-    // Clear service worker registration
-    if ('serviceWorker' in navigator) {
-        navigator.serviceWorker.getRegistrations().then(registrations => {
-            registrations.forEach(registration => {
-                registration.unregister();
-            });
-        });
-    }
-    
-    // Set new version
-    localStorage.setItem('appVersion', APP_VERSION);
-    
-    // Reload page
-    window.location.reload();
-}
-
-
-
-
-
 // app.js - Complete Supercharged Life Tracker Pro
-
-
-
-
-
 const LifeTrackerApp = {
     init() {
         this.currentDate = new Date();
